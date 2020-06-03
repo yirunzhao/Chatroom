@@ -67,16 +67,70 @@ void delete_from_client_list(int uid)
         }
     }
 }
-
-
+void send_to_all(char *msg,struct UserClient *cli)
+{
+    char *all;
+    for(int i = 0; i < OPEN_MAX; i++){
+        if(clients[i]){
+            if(clients[i]->gid == cli->gid){
+                sprintf(all,"[%s] says:%s",cli->name,msg);
+                Write(clients[i]->fd,all,strlen(all));
+            }
+        }
+    }
+}
+void send_to_certain(char *msg,struct UserClient *cli,int uid)
+{
+    char *all;
+    if(cli->uid == uid){
+        sprintf(all,"You can't send messages to yourself!\n");
+        Write(cli->fd,all,strlen(all));
+        return ;
+    }
+    for(int i = 0; i < OPEN_MAX; i++){
+        if(clients[i]){
+            if(clients[i]->uid == uid){
+                sprintf(all,"[%s] sends a private message to you:%s",cli->name,msg);
+                Write(clients[i]->fd,all,strlen(all));
+            }
+        }
+    }
+}
+void trim_string(char *str)
+{
+    int len = strlen(str);
+    if (str[len - 1] == '\n')
+    {
+        len--;
+        str[len] = 0;
+    }
+}
+void strip_newline(char *s)
+{
+    while(*s != '\0'){
+        if(*s == '\r' || *s == '\n'){
+            *s = '\0';
+        }
+        s++;
+    }
+}
+struct UserClient* get_client(int fd)
+{
+    for(int i = 0; i < OPEN_MAX; i++){
+        if(clients[i]->fd == fd){
+            return clients[i];
+        }
+    }
+}
 int main(void)
 {
     int i, num = 0;                     //num是连接数量，i是循环变量
     int n;                              // n是读出的字节数
     int server_fd, connect_fd, sock_fd; // 三个描述符
     ssize_t nready, epfd, ret;          // epoll的相关，返回值
-    char buf[MAXLINE], str[INET_ADDRSTRLEN];
-
+    char buf[MAXLINE], str[INET_ADDRSTRLEN];    // 接受客户端发来的信息
+    char *command,*param; // 指令、指令的参数
+    char message[MAXLINE]; // 发送的消息
     struct sockaddr_in server_addr, client_addr;
     socklen_t client_len;
     // epoll的临时变量，用于挂载到红黑树
@@ -153,6 +207,7 @@ int main(void)
             {
                 // 得到对应的描述符
                 sock_fd = ep[i].data.fd;
+                struct UserClient *cli = get_client(sock_fd);
                 // 得到用户发送的信息，指令判断就写在这里了
                 n = Read(sock_fd, buf, MAXLINE);
 
@@ -174,11 +229,52 @@ int main(void)
                 }
                 else
                 {
-                    // 处理数据，应该对数据进行编码分类，不然不知道该干什么
-                    // Writen(sock_fd,buf,strlen(buf));
                     // buf 里面就是客户端发过来的指令了
+                    // send hello world
                     printf("接受到客户端命令:%s\n",buf);
+                    strip_newline(buf);
+                    if(strlen(buf) == 0){
+                        continue;
+                    }
+                    // trim_string(command);
+                    // 截取第一个
+                    command = strtok(buf," ");
+                    printf("截取的%s\n",command);
                     
+                    
+                    // 发送给全部
+                    if(strcmp(command,"send") == 0){
+                        // 截取第二个
+                        param = strtok(NULL," ");
+                        if(param){
+                            // sprintf(message,"%s",param);
+                            while(param != NULL){
+                                strcat(message," ");
+                                strcat(message,param);
+                                param = strtok(NULL," ");
+                            }
+                            printf("message is %s",message);
+                            strcat(message,"\n");
+                            send_to_all(message,cli);
+                            // 发送完之后应该清零
+                            memset(message,0,sizeof(message));
+                        }
+                    }
+                    // 发送给特定用户
+                    if(strcmp(command,"sendtouser") == 0){
+                        // sendtouser uid msg
+                        param = strtok(NULL," ");
+                        int sendto_uid = atoi(param);
+                        if(param){
+                            while(param != NULL){
+                                strcat(message," ");
+                                strcat(message,param);
+                                param = strtok(NULL," ");
+                            }
+                            send_to_certain(message,cli,sendto_uid);
+                            memset(message,0,sizeof(message));
+                        }
+                    }
                 }
             }
         }
