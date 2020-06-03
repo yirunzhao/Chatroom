@@ -38,14 +38,6 @@ struct UserClient{
 // 记录连接的用户
 // 这个东西是固定的，有新的客户端进来有空即插
 struct UserClient *clients[OPEN_MAX];
-// 给客户端发送用户信息
-void send_userinfo()
-{
-}
-// 给客户端发送聊天室信息
-void send_chatroominfo()
-{
-}
 
 void add_to_client_list(struct UserClient *cli)
 {
@@ -66,6 +58,22 @@ void delete_from_client_list(int uid)
             }
         }
     }
+}
+void send_help(int fd)
+{
+    char msg[MAXLINE];
+    strcat(msg,"** This is a chatroom made by WHU.CS.Ryan, see more details on my github: https://github.com/yirunzhao/Chatroom **\n");
+    strcat(msg,"** This chatroom is the final assigment of Linuusernamex Network Programming **\n");
+    strcat(msg,"** Use 'zyrctrm login `username` `password`' to sign in **\n");
+    strcat(msg,"** Use 'zyrctrm register `username` `password`' to sign up **\n");
+    strcat(msg,"** Use 'zyrctrm list -r' to get all online chatrooms **\n");
+    strcat(msg,"** Use 'zyrctrm list -u' to get all online users **\n");
+    strcat(msg,"** Use 'zyrctrm leave' to leave current chatroom **\n");
+    strcat(msg,"** Use 'zyrctrm createrm `roomid` `roompwd` to create a chatroom **\n");
+    strcat(msg,"** Use 'zyrctrm enter `roomid` `roompwd` to enter a chatroom **\n");
+    strcat(msg,"** Use 'zyrctrm sendtouser `userid` `message` to send messages to a certain user **\n");
+    strcat(msg,"** Use 'zyrctrm send `message` to send messages to your current chatroom **\n");
+    Write(fd,msg,strlen(msg));
 }
 void send_to_all(char *msg,struct UserClient *cli)
 {
@@ -95,6 +103,19 @@ void send_to_certain(char *msg,struct UserClient *cli,int uid)
             }
         }
     }
+}
+void send_online_users(int fd)
+{
+    char *all;
+    sprintf(all,"Username\tUserID\tUserRoom\n");
+    Write(fd,all,strlen(all));
+    for(int i = 0; i < OPEN_MAX; i++){
+        if(clients[i]){
+            sprintf(all,"%s\t%d\t%d\n",clients[i]->name,clients[i]->uid,clients[i]->gid);
+            Write(fd,all,strlen(all));
+        }
+    }
+    
 }
 void trim_string(char *str)
 {
@@ -273,6 +294,18 @@ int main(void)
                             }
                             send_to_certain(message,cli,sendto_uid);
                             memset(message,0,sizeof(message));
+                        }
+                    }
+                    // 查看帮助
+                    if(strcmp(command,"help") == 0){
+                        send_help(sock_fd);
+                    }
+                    // list操作
+                    if(strcmp(command,"list") == 0){
+                        param = strtok(NULL," ");
+                        // 查看在线用户
+                        if(strcmp(param,"-u") == 0){
+                            send_online_users(sock_fd);
                         }
                     }
                 }
