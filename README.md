@@ -10,3 +10,6 @@
 - sendtouser 'userid' 'messsage'    给某个人发私信
 - help                  查看帮助
 - list -u               查看在线的用户
+- createrm 'password'   创建聊天室，密码是password
+- join 'roomid' 'roompassword'  加入聊天室
+- leave                 离开当前聊天室
