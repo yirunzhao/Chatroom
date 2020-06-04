@@ -24,7 +24,7 @@
 #define MAXLINE 8192
 
 int online_user_count = 0;
-int chatroom_count = 1;
+int chatroom_count = 0;
 // 用户id，注册的时候分配，以后操作的时候都要使用uid
 static int Userid = 100;
 static int Roomid = 10;
@@ -44,12 +44,14 @@ struct UserClient *clients[OPEN_MAX];
 // 记录聊天室
 struct Chatroom
 {
-    int roomid;
-    char password[50];
+    int roomid;        // id
+    char password[50]; // 密码
+    int numbers;       // 该聊天室的人数
 };
 // 记录所有的聊天室
 struct Chatroom *rooms[OPEN_MAX + 1];
 
+// 把聊天室加入list
 void add_to_room_list(struct Chatroom *room)
 {
     for (int i = 0; i < OPEN_MAX + 1; i++)
@@ -62,6 +64,7 @@ void add_to_room_list(struct Chatroom *room)
     }
     chatroom_count++;
 }
+// 把聊天室删除
 void delete_from_room_list(int roomid)
 {
     for (int i = 0; i < OPEN_MAX + 1; i++)
@@ -70,6 +73,7 @@ void delete_from_room_list(int roomid)
         {
             if (rooms[i]->roomid == roomid)
             {
+                free(rooms[i]);
                 rooms[i] = NULL;
                 break;
             }
@@ -97,6 +101,7 @@ void delete_from_client_list(int uid)
         {
             if (clients[i]->uid == uid)
             {
+                free(clients[i]);
                 clients[i] = NULL;
                 break;
             }
@@ -124,15 +129,15 @@ void send_help(int fd)
 // 给同一个聊天室的所有用户发消息
 void send_to_all(char *msg, struct UserClient *cli)
 {
-    char *all;
+    char *all_msg;
     for (int i = 0; i < OPEN_MAX; i++)
     {
         if (clients[i])
         {
             if (clients[i]->roomid == cli->roomid)
             {
-                sprintf(all, "[%s] says:%s", cli->name, msg);
-                Write(clients[i]->fd, all, strlen(all));
+                sprintf(all_msg, "[%s] says:%s", cli->name, msg);
+                Write(clients[i]->fd, all_msg, strlen(all_msg));
             }
         }
     }
@@ -177,11 +182,26 @@ void send_online_users(int fd)
 // list -r 发送所有开设的聊天室
 void send_open_rooms(int fd)
 {
-
+    // char all[100];
+    char *all;
+    sprintf(all, "|Room id|\t|User count|\t|Total Rooms:%d|\n", chatroom_count);
+    Write(fd, all, strlen(all));
+    for (int i = 0; i < OPEN_MAX; i++)
+    {
+        if (rooms[i] != NULL)
+        {
+            if (rooms[i]->roomid != 0)
+            {
+                memset(all, 0, sizeof(all));
+                sprintf(all, "|%d|\t\t|%d|\t\n", rooms[i]->roomid, rooms[i]->numbers);
+                Write(fd, all, strlen(all));
+            }
+        }
+    }
 }
 int is_chatroom_empty(int roomid)
 {
-    for (int i = 0; i < OPEN_MAX; i++)
+    for (int i = 0; i < OPEN_MAX + 1; i++)
     {
         if (clients[i])
         {
@@ -198,10 +218,13 @@ struct Chatroom *get_room(int rmid)
 {
     for (int i = 0; i < OPEN_MAX + 1; i++)
     {
-        if (rooms[i])
+        if (rooms[i] != NULL)
         {
             if (rooms[i]->roomid == rmid)
             {
+                // char s[100];
+                // sprintf(s, "before rmid:%d\n", rooms[i]->roomid);
+                // Write(STDOUT_FILENO, s, strlen(s));
                 return rooms[i];
             }
         }
@@ -210,14 +233,25 @@ struct Chatroom *get_room(int rmid)
 }
 int join_chatroom(int rmid, char *pwd, struct UserClient *cli)
 {
-    struct Chatroom *room;
+    struct Chatroom *room,*temp;
     room = get_room(rmid);
+    // TMD这个地方必须复制，不然下面就会出错，cnm
+    char *password;
+    strcpy(password,room->password);
+    // room = rooms[1];
+    // char s[100];
+    // sprintf(s, "before rmid:%d\n", room->roomid);
+    // Write(STDOUT_FILENO, s, strlen(s));
     if (room != NULL)
     {
+        // sprintf(s, "before numbers:%d\n", room->numbers);
+        // Write(STDOUT_FILENO, s, strlen(s));
         // 如果密码相同
-        if (strcmp(room->password, pwd) == 0)
+        // if (strcmp(room->password, pwd) == 0)
+        if(strcmp(password,pwd) == 0)
         {
             cli->roomid = rmid;
+            room->numbers++;
             return 1;
         }
         else
@@ -225,14 +259,9 @@ int join_chatroom(int rmid, char *pwd, struct UserClient *cli)
             return 0;
         }
     }
-}
-void trim_string(char *str)
-{
-    int len = strlen(str);
-    if (str[len - 1] == '\n')
+    else
     {
-        len--;
-        str[len] = 0;
+        Write(STDOUT_FILENO, "FUCK", strlen("FCUK"));
     }
 }
 void strip_newline(char *s)
@@ -298,10 +327,19 @@ int main(void)
 
     // 挂载监听的服务器socket
     temp.data.fd = server_fd;
-    temp.events = EPOLLIN;
+    temp.events = EPOLLIN | EPOLLET;
     ret = epoll_ctl(epfd, EPOLL_CTL_ADD, server_fd, &temp);
     if (ret == -1)
         perr_exit("挂载监听fd失败");
+
+    // 建立公屏聊天室
+    // 公屏，聊天室编号为0
+    struct Chatroom *rm = (struct Chatroom *)malloc(sizeof(struct Chatroom));
+    rm->roomid = 0;
+    rm->numbers = -1;
+    // 其实不需要密码也可以
+    sprintf(rm->password, "%s", "123456");
+    add_to_room_list(rm);
 
     // 进行阻塞接受
     while (1)
@@ -336,21 +374,16 @@ int main(void)
                 cli->uid = Userid++;
                 sprintf(cli->name, "user %d", cli->uid);
                 add_to_client_list(cli);
-
-                // 公屏，聊天室编号为0
-                struct Chatroom *rm = (struct Chatroom *)malloc(sizeof(struct Chatroom));
-                rm->roomid = 0;
-                // 其实不需要密码也可以
-                sprintf(rm->password, "%s", "123456");
-                add_to_room_list(rm);
             }
             // 如果是数据读写事件
             else
             {
                 // 得到对应的描述符
                 sock_fd = ep[i].data.fd;
+                // cli就是当前的用户
                 struct UserClient *cli = get_client(sock_fd);
                 // 得到用户发送的信息，指令判断就写在这里了
+                memset(buf,0,MAXLINE);
                 n = Read(sock_fd, buf, MAXLINE);
 
                 // 沙都没有，关闭连接
@@ -443,19 +476,21 @@ int main(void)
                         // 查看聊天室
                         if (strcmp(param, "-r") == 0)
                         {
+                            send_open_rooms(sock_fd);
                         }
                     }
                     // 如果是创建房间
                     // createrm password
                     if (strcmp(command, "createrm") == 0)
                     {
-                        Write(STDOUT_FILENO, "fuck", sizeof("test"));
+                        Write(STDOUT_FILENO, "test", sizeof("test"));
                         param = strtok(NULL, " ");
                         if (param != NULL)
                         {
                             // 拿到密码
                             struct Chatroom *rm = (struct Chatroom *)malloc(sizeof(struct Chatroom));
                             rm->roomid = Roomid++;
+                            rm->numbers = 1;
                             sprintf(rm->password, "%s", param);
                             // 加入到list中
                             add_to_room_list(rm);
@@ -488,14 +523,24 @@ int main(void)
                     // 离开聊天室
                     if (strcmp(command, "leave") == 0)
                     {
-                        send_to_all(" I have left chatroom\n", cli);
-                        int tempid = cli->roomid;
-                        // 切换到公屏
-                        cli->roomid = 0;
-                        // 判断一下聊天室的人数，如果没有人了就关闭
-                        if (is_chatroom_empty(cli->roomid))
+                        if (cli->roomid != 0)
                         {
-                            delete_from_room_list(tempid);
+                            send_to_all(" I have left chatroom\n", cli);
+                            struct Chatroom *rm = get_room(cli->roomid);
+                            rm->numbers--;
+                            int tempid = cli->roomid;
+                            // 切换到公屏
+                            cli->roomid = 0;
+                            // 判断一下聊天室的人数，如果没有人了就关闭
+                            // if (is_chatroom_empty(cli->roomid))
+                            if (rm->numbers == 0)
+                            {
+                                delete_from_room_list(tempid);
+                            }
+                        }
+                        else
+                        {
+                            Write(sock_fd, "You have already left!\n", strlen("You have already left!\n"));
                         }
                     }
                 }
