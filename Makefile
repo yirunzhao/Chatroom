@@ -1,12 +1,8 @@
-src = $(wildcard *.c)
-target = $(patsubst %.c, %, $(src))
+server:wrap.o server.o
+	gcc wrap.o server.o -o server -L /usr/lib/mysql/ -lmysqlclient
 
-ALL:$(target)
+wrap.o:wrap.c
+	gcc -c wrap.c
 
-%:%.c
-	gcc $< -o $@
-
-clean:
-	-rm -rf $(target)
-
-.PHONY: clean ALL
+server.o:server.c
+	gcc -c server.c

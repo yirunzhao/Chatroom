@@ -17,7 +17,15 @@
 #include <sys/epoll.h>
 #include <arpa/inet.h>
 #include "wrap.h"
+#include <mysql/mysql.h>
+// 定义mysql连接的宏
+#define HOST "localhost"
+#define USER "root"
+#define PASSWORD "123456"
+#define DATABASE "db_chatroom"
+// end
 
+// 定义socket相关的宏
 #define SERVER_IP "127.0.0.1"
 #define SERVER_PORT 8888
 #define OPEN_MAX 100
@@ -36,6 +44,7 @@ struct UserClient
     int uid;                 // 用户的id,实际上不要也可以
     int roomid;              // 用户所属的聊天室
     char name[32];           // 用户名，初始化为uid
+    int islogin;             // 判断是否登陆
 };
 // 记录连接的用户
 // 这个东西是固定的，有新的客户端进来有空即插
@@ -50,6 +59,46 @@ struct Chatroom
 };
 // 记录所有的聊天室
 struct Chatroom *rooms[OPEN_MAX + 1];
+
+// mysql查询
+int query(MYSQL *conn, char *sql)
+{
+    int ret;
+    MYSQL_RES *res;
+    MYSQL_FIELD *field;
+    MYSQL_ROW res_row;
+    int row, col;
+    int i, j;
+
+    ret = mysql_query(conn, sql);
+    if (ret)
+    {
+        printf("error\n");
+        mysql_close(conn);
+        return -1;
+    }
+    else
+    {
+        res = mysql_store_result(conn);
+        if (res)
+        {
+            col = mysql_num_fields(res);
+            row = mysql_num_rows(res);
+            printf("查询到 %d 行\n", row);
+            for (i = 0; field = mysql_fetch_field(res); i++)
+                printf("%10s ", field->name);
+            printf("\n");
+            for (i = 1; i < row + 1; i++)
+            {
+                res_row = mysql_fetch_row(res);
+                for (j = 0; j < col; j++)
+                    printf("%10s ", res_row[j]);
+                printf("\n");
+            }
+        }
+        return row;
+    }
+}
 
 // 把聊天室加入list
 void add_to_room_list(struct Chatroom *room)
@@ -115,15 +164,15 @@ void send_help(int fd)
     char msg[MAXLINE];
     strcat(msg, "** This is a chatroom made by WHU.CS.Ryan, see more details on my github: https://github.com/yirunzhao/Chatroom **\n");
     strcat(msg, "** This chatroom is the final assigment of Linuusernamex Network Programming **\n");
-    strcat(msg, "** Use 'zyrctrm login `username` `password`' to sign in **\n");
-    strcat(msg, "** Use 'zyrctrm register `username` `password`' to sign up **\n");
-    strcat(msg, "** Use 'zyrctrm list -r' to get all online chatrooms **\n");
-    strcat(msg, "** Use 'zyrctrm list -u' to get all online users **\n");
-    strcat(msg, "** Use 'zyrctrm leave' to leave current chatroom **\n");
-    strcat(msg, "** Use 'zyrctrm createrm `roomid` `roompwd` to create a chatroom **\n");
-    strcat(msg, "** Use 'zyrctrm enter `roomid` `roompwd` to enter a chatroom **\n");
-    strcat(msg, "** Use 'zyrctrm sendtouser `userid` `message` to send messages to a certain user **\n");
-    strcat(msg, "** Use 'zyrctrm send `message` to send messages to your current chatroom **\n");
+    strcat(msg, "** Use ' login `username` `password`' to sign in **\n");
+    strcat(msg, "** Use ' register `username` `password`' to sign up **\n");
+    strcat(msg, "** Use ' list -r' to get all online chatrooms **\n");
+    strcat(msg, "** Use ' list -u' to get all online users **\n");
+    strcat(msg, "** Use ' leave' to leave current chatroom **\n");
+    strcat(msg, "** Use ' createrm `roomid` `roompwd` to create a chatroom **\n");
+    strcat(msg, "** Use ' enter `roomid` `roompwd` to enter a chatroom **\n");
+    strcat(msg, "** Use ' sendtouser `userid` `message` to send messages to a certain user **\n");
+    strcat(msg, "** Use ' send `message` to send messages to your current chatroom **\n");
     Write(fd, msg, strlen(msg));
 }
 // 给同一个聊天室的所有用户发消息
@@ -168,13 +217,16 @@ void send_to_certain(char *msg, struct UserClient *cli, int uid)
 void send_online_users(int fd)
 {
     char all[100];
-    sprintf(all, "Username\tUserID\tUserRoom\tTotal Online:%d\n", online_user_count);
+    sprintf(all, "|Username|\t|UserID|\t|UserRoom|\t|Total Online:%d|\n", online_user_count);
     Write(fd, all, strlen(all));
     for (int i = 0; i < OPEN_MAX; i++)
     {
         if (clients[i])
         {
-            sprintf(all, "%s\t%d\t%d\n", clients[i]->name, clients[i]->uid, clients[i]->roomid);
+            if (strlen(clients[i]->name) >= 8)
+                sprintf(all, "|%s|\t|%d|\t\t|%d|\n", clients[i]->name, clients[i]->uid, clients[i]->roomid);
+            else
+                sprintf(all, "|%s|\t\t|%d|\t\t|%d|\n", clients[i]->name, clients[i]->uid, clients[i]->roomid);
             Write(fd, all, strlen(all));
         }
     }
@@ -233,11 +285,11 @@ struct Chatroom *get_room(int rmid)
 }
 int join_chatroom(int rmid, char *pwd, struct UserClient *cli)
 {
-    struct Chatroom *room,*temp;
+    struct Chatroom *room, *temp;
     room = get_room(rmid);
     // TMD这个地方必须复制，不然下面就会出错，cnm
     char *password;
-    strcpy(password,room->password);
+    strcpy(password, room->password);
     // room = rooms[1];
     // char s[100];
     // sprintf(s, "before rmid:%d\n", room->roomid);
@@ -248,7 +300,7 @@ int join_chatroom(int rmid, char *pwd, struct UserClient *cli)
         // Write(STDOUT_FILENO, s, strlen(s));
         // 如果密码相同
         // if (strcmp(room->password, pwd) == 0)
-        if(strcmp(password,pwd) == 0)
+        if (strcmp(password, pwd) == 0)
         {
             cli->roomid = rmid;
             room->numbers++;
@@ -296,6 +348,7 @@ int main(void)
     char buf[MAXLINE], str[INET_ADDRSTRLEN]; // 接受客户端发来的信息
     char *command, *param;                   // 指令、指令的参数
     char message[MAXLINE];                   // 发送的消息
+    char *need_login = "You have to login first!\n";
     struct sockaddr_in server_addr, client_addr;
     socklen_t client_len;
     // epoll的临时变量，用于挂载到红黑树
@@ -341,6 +394,19 @@ int main(void)
     sprintf(rm->password, "%s", "123456");
     add_to_room_list(rm);
 
+    // mysql初始化
+    MYSQL *conn;
+    MYSQL_RES *res;
+    MYSQL_ROW row;
+
+    conn = mysql_init(NULL);
+    if (!mysql_real_connect(conn, HOST, USER, PASSWORD, DATABASE, 0, NULL, 0))
+    {
+        printf("ok");
+        fprintf(stderr, "%s\n", mysql_error(conn));
+        exit(1);
+    }
+
     // 进行阻塞接受
     while (1)
     {
@@ -372,6 +438,7 @@ int main(void)
                 cli->fd = connect_fd;
                 cli->roomid = 0;
                 cli->uid = Userid++;
+                cli->islogin = 0; // 没有登陆
                 sprintf(cli->name, "user %d", cli->uid);
                 add_to_client_list(cli);
             }
@@ -380,10 +447,11 @@ int main(void)
             {
                 // 得到对应的描述符
                 sock_fd = ep[i].data.fd;
+                // Write(sock_fd,"zyr chatroom >> ",strlen("zyr chatroom >> "));
                 // cli就是当前的用户
                 struct UserClient *cli = get_client(sock_fd);
                 // 得到用户发送的信息，指令判断就写在这里了
-                memset(buf,0,MAXLINE);
+                memset(buf, 0, MAXLINE);
                 n = Read(sock_fd, buf, MAXLINE);
 
                 // 沙都没有，关闭连接
@@ -483,65 +551,132 @@ int main(void)
                     // createrm password
                     if (strcmp(command, "createrm") == 0)
                     {
-                        Write(STDOUT_FILENO, "test", sizeof("test"));
-                        param = strtok(NULL, " ");
-                        if (param != NULL)
+                        if (cli->islogin == 1)
                         {
-                            // 拿到密码
-                            struct Chatroom *rm = (struct Chatroom *)malloc(sizeof(struct Chatroom));
-                            rm->roomid = Roomid++;
-                            rm->numbers = 1;
-                            sprintf(rm->password, "%s", param);
-                            // 加入到list中
-                            add_to_room_list(rm);
-                            // 把用户的房间切换
-                            cli->roomid = rm->roomid;
-                        }
-                    }
-                    // 进入聊天室
-                    // join roomid roompwd
-                    if (strcmp(command, "join") == 0)
-                    {
-                        int rmid;
-                        char pwd[50];
-                        param = strtok(NULL, " "); // param此时是roomid
-                        if (param != NULL)
-                        {
-                            rmid = atoi(param);
-                            param = strtok(NULL, " "); // param此时是pwd
+                            Write(STDOUT_FILENO, "test", sizeof("test"));
+                            param = strtok(NULL, " ");
                             if (param != NULL)
                             {
-                                sprintf(pwd, "%s", param);
-                                int ret = join_chatroom(rmid, pwd, cli);
-                                if (ret == 1)
-                                    send_to_all(" I have joined the chatroom!\n", cli);
-                                else
-                                    Write(sock_fd, "Wrong password or room id\n", strlen("Wrong password or room id\n"));
-                            }
-                        }
-                    }
-                    // 离开聊天室
-                    if (strcmp(command, "leave") == 0)
-                    {
-                        if (cli->roomid != 0)
-                        {
-                            send_to_all(" I have left chatroom\n", cli);
-                            struct Chatroom *rm = get_room(cli->roomid);
-                            rm->numbers--;
-                            int tempid = cli->roomid;
-                            // 切换到公屏
-                            cli->roomid = 0;
-                            // 判断一下聊天室的人数，如果没有人了就关闭
-                            // if (is_chatroom_empty(cli->roomid))
-                            if (rm->numbers == 0)
-                            {
-                                delete_from_room_list(tempid);
+                                // 拿到密码
+                                struct Chatroom *rm = (struct Chatroom *)malloc(sizeof(struct Chatroom));
+                                rm->roomid = Roomid++;
+                                rm->numbers = 1;
+                                sprintf(rm->password, "%s", param);
+                                // 加入到list中
+                                add_to_room_list(rm);
+                                // 把用户的房间切换
+                                cli->roomid = rm->roomid;
                             }
                         }
                         else
                         {
                             Write(sock_fd, "You have already left!\n", strlen("You have already left!\n"));
                         }
+                    }
+                    // 进入聊天室
+                    // join roomid roompwd
+                    if (strcmp(command, "join") == 0)
+                    {
+                        if (cli->islogin == 1)
+                        {
+                            int rmid;
+                            char pwd[50];
+                            param = strtok(NULL, " "); // param此时是roomid
+                            if (param != NULL)
+                            {
+                                rmid = atoi(param);
+                                param = strtok(NULL, " "); // param此时是pwd
+                                if (param != NULL)
+                                {
+                                    sprintf(pwd, "%s", param);
+                                    int ret = join_chatroom(rmid, pwd, cli);
+                                    if (ret == 1)
+                                        send_to_all(" I have joined the chatroom!\n", cli);
+                                    else
+                                        Write(sock_fd, "Wrong password or room id\n", strlen("Wrong password or room id\n"));
+                                }
+                            }
+                        }
+                        else
+                        {
+                            Write(sock_fd, "You have already left!\n", strlen("You have already left!\n"));
+                        }
+                    }
+                    // 离开聊天室
+                    if (strcmp(command, "leave") == 0)
+                    {
+                        if (cli->islogin == 1)
+                        {
+                            if (cli->roomid != 0)
+                            {
+                                send_to_all(" I have left chatroom\n", cli);
+                                struct Chatroom *rm = get_room(cli->roomid);
+                                rm->numbers--;
+                                int tempid = cli->roomid;
+                                // 切换到公屏
+                                cli->roomid = 0;
+                                // 判断一下聊天室的人数，如果没有人了就关闭
+                                // if (is_chatroom_empty(cli->roomid))
+                                if (rm->numbers == 0)
+                                {
+                                    delete_from_room_list(tempid);
+                                }
+                            }
+                            else
+                            {
+                                Write(sock_fd, "You have already left!\n", strlen("You have already left!\n"));
+                            }
+                        }
+                        else
+                        {
+                            Write(sock_fd, need_login, strlen(need_login));
+                        }
+                    }
+                    // 注册
+                    // register name password
+                    if (strcmp(command, "register") == 0)
+                    {
+                        char name[20], pwd[20];
+                        char sql[100];
+                        param = strtok(NULL, " "); // param是用户名
+                        strcpy(name, param);
+                        if (param != NULL)
+                        {
+                            param = strtok(NULL, " "); // param是密码
+                            strcpy(pwd, param);
+                            // 然后将用户插入到数据库中去
+                            int no = query(conn, "select * from user") + 1;
+                            sprintf(sql, "insert into user values(%d,'%s','%s')", no, name, pwd);
+                            query(conn, sql);
+                            Write(sock_fd, "Create Account Successfully!\n", strlen("Create Account Successfully"));
+                        }
+                    }
+                    // 登陆
+                    if (strcmp(command, "login") == 0)
+                    {
+                        char name[20], pwd[20], sql[100];
+                        param = strtok(NULL, " "); // param是用户名
+                        strcpy(name, param);
+                        if (param != NULL)
+                        {
+                            param = strtok(NULL, " "); // param是密码
+                            strcpy(pwd, param);
+                            // 判断是否用户名和密码正确
+                            sprintf(sql, "select * from user where name='%s' and password='%s'", name, pwd);
+                            int ok = query(conn, sql);
+                            if (ok == 1)
+                            {
+                                Write(sock_fd, "login successfully!\n", strlen("login successfully!\n"));
+                                // 然后干其他的事情
+                                strcpy(cli->name, name);
+                                cli->islogin = 1;
+                            }
+                        }
+                    }
+                    if (strcmp(command, "logout") == 0)
+                    {
+                        Write(sock_fd, "logout successfully!\n", strlen("logout successfully!\n"));
+                        cli->islogin = 0;
                     }
                 }
             }

@@ -14,3 +14,6 @@
 - `createrm 'password'`   创建聊天室，密码是password
 - `join 'roomid' 'roompassword'`  加入聊天室
 - `leave`                 离开当前聊天室
+
+### 注意
+- 连接服务器之后默认是匿名用户，只能在公屏发言，需要登陆才能创建/加入聊天室，私发消息给其他用户
