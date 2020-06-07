@@ -207,7 +207,7 @@ void send_to_certain(char *msg, struct UserClient *cli, int uid)
         {
             if (clients[i]->uid == uid)
             {
-                sprintf(all, "[%s] sends a private message to you:%s", cli->name, msg);
+                sprintf(all, "[%s] sends a private message to you:%s\n", cli->name, msg);
                 Write(clients[i]->fd, all, strlen(all));
             }
         }
@@ -511,20 +511,27 @@ int main(void)
                     // 发送给特定用户
                     if (strcmp(command, "sendtouser") == 0)
                     {
-                        // sendtouser uid msg
-                        param = strtok(NULL, " ");
-                        int sendto_uid = atoi(param);
-                        if (param)
+                        if (cli->islogin == 1)
                         {
-                            while (param != NULL)
+                            // sendtouser uid msg
+                            param = strtok(NULL, " ");
+                            int sendto_uid = atoi(param);
+                            if (param)
                             {
-                                strcat(message, " ");
-                                param = strtok(NULL, " ");
-                                if (param != NULL)
-                                    strcat(message, param);
+                                while (param != NULL)
+                                {
+                                    strcat(message, " ");
+                                    param = strtok(NULL, " ");
+                                    if (param != NULL)
+                                        strcat(message, param);
+                                }
+                                send_to_certain(message, cli, sendto_uid);
+                                memset(message, 0, sizeof(message));
                             }
-                            send_to_certain(message, cli, sendto_uid);
-                            memset(message, 0, sizeof(message));
+                        }
+                        else
+                        {
+                            Write(sock_fd, "You have already left!\n", strlen("You have already left!\n"));
                         }
                     }
                     // 查看帮助
