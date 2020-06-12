@@ -364,6 +364,7 @@ int main(void)
     char *command, *param;                   // 指令、指令的参数
     char message[MAXLINE];                   // 发送的消息
     char *hello = "Welcome to WHU.CS.Ryan's Chatroom!\n"; // 欢迎信息
+    char *hint = "Wrong command! Please use 'help' to get all commands!\n";
     char *need_login = "You have to login first!\n";
     struct sockaddr_in server_addr, client_addr;
     socklen_t client_len;
@@ -527,7 +528,7 @@ int main(void)
                         }
                     }
                     // 发送给特定用户
-                    if (strcmp(command, "sendtouser") == 0)
+                    else if (strcmp(command, "sendtouser") == 0)
                     {
                         if (cli->islogin == 1)
                         {
@@ -553,12 +554,12 @@ int main(void)
                         }
                     }
                     // 查看帮助
-                    if (strcmp(command, "help") == 0)
+                    else if (strcmp(command, "help") == 0)
                     {
                         send_help(sock_fd);
                     }
                     // list操作
-                    if (strcmp(command, "list") == 0)
+                    else if (strcmp(command, "list") == 0)
                     {
                         param = strtok(NULL, " ");
                         // 查看在线用户
@@ -574,7 +575,7 @@ int main(void)
                     }
                     // 如果是创建房间
                     // createrm password
-                    if (strcmp(command, "createrm") == 0)
+                    else if (strcmp(command, "createrm") == 0)
                     {
                         if (cli->islogin == 1)
                         {
@@ -600,7 +601,7 @@ int main(void)
                     }
                     // 进入聊天室
                     // join roomid roompwd
-                    if (strcmp(command, "join") == 0)
+                    else if (strcmp(command, "join") == 0)
                     {
                         if (cli->islogin == 1)
                         {
@@ -628,7 +629,7 @@ int main(void)
                         }
                     }
                     // 离开聊天室
-                    if (strcmp(command, "leave") == 0)
+                    else if (strcmp(command, "leave") == 0)
                     {
                         if (cli->islogin == 1)
                         {
@@ -659,7 +660,7 @@ int main(void)
                     }
                     // 注册
                     // register name password
-                    if (strcmp(command, "register") == 0)
+                    else if (strcmp(command, "register") == 0)
                     {
                         char name[20], pwd[20];
                         char sql[100];
@@ -677,7 +678,7 @@ int main(void)
                         }
                     }
                     // 登陆
-                    if (strcmp(command, "login") == 0)
+                    else if (strcmp(command, "login") == 0)
                     {
                         char name[20], pwd[20], sql[100];
                         param = strtok(NULL, " "); // param是用户名
@@ -698,10 +699,14 @@ int main(void)
                             }
                         }
                     }
-                    if (strcmp(command, "logout") == 0)
+                    else if (strcmp(command, "logout") == 0)
                     {
                         Write(sock_fd, "logout successfully!\n", strlen("logout successfully!\n"));
                         cli->islogin = 0;
+                    }
+                    // 错误指令
+                    else{
+                        Write(sock_fd, hint, strlen(hint));
                     }
                 }
             }
