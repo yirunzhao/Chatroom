@@ -1,9 +1,7 @@
 /*
     Author: WHU.CS.Ryan
     Date: 2020.6
-    
 */
-// 暂时不考虑互斥问题
 #include <stdio.h>
 #include <string.h>
 #include <sys/socket.h>
@@ -18,25 +16,31 @@
 #include <arpa/inet.h>
 #include "wrap.h"
 #include <mysql/mysql.h>
-// 定义mysql连接的宏
+
+// ----定义mysql连接的宏----
 #define HOST "localhost"
 #define USER "root"
 #define PASSWORD "123456"
 #define DATABASE "db_chatroom"
-// end
+// ----end----
 
-// 定义socket相关的宏
+// ----定义socket相关的宏----
 #define SERVER_IP "127.0.0.1"
 #define SERVER_PORT 8888
 #define OPEN_MAX 100
 #define MAXLINE 8192
+// ----end----
 
+// ----定义一些全局变量----
 int online_user_count = 0;
 int chatroom_count = 0;
 // 用户id，注册的时候分配，以后操作的时候都要使用uid
 static int Userid = 100;
 static int Roomid = 10;
-// 用一个结构记录客户端的连接
+// ----end----
+
+// ----定义客户端和聊天室的结构体----
+// 记录客户端的
 struct UserClient
 {
     struct sockaddr_in addr; // 地址结构
@@ -59,8 +63,24 @@ struct Chatroom
 };
 // 记录所有的聊天室
 struct Chatroom *rooms[OPEN_MAX + 1];
+// ----end----
 
-// mysql查询
+// --------所有的函数声明--------
+int query(MYSQL *conn, char *sql);                                // mysql查询
+void add_to_room_list(struct Chatroom *room);                     // 把聊天室加入list
+void delete_from_room_list(int roomid);                           // 把聊天室删除
+void add_to_client_list(struct UserClient *cli);                  //
+void delete_from_client_list(int uid);                            //
+void send_help(int fd);                                           // help文档
+void send_to_all(char *msg, struct UserClient *cli);              // 给同一个聊天室的所有用户发消息
+void send_to_certain(char *msg, struct UserClient *cli, int uid); // 给特定用户发消息
+void send_online_users(int fd);                                   // list -u 发送所有在线用户
+void send_open_rooms(int fd);                                     // list -r 发送所有开设的聊天室
+struct Chatroom *get_room(int rmid);                              // 根据房间id获取房间
+int join_chatroom(int rmid, char *pwd, struct UserClient *cli);
+void strip_newline(char *s);
+struct UserClient *get_client(int fd);
+// --------end------------
 int query(MYSQL *conn, char *sql)
 {
     int ret;
@@ -100,7 +120,6 @@ int query(MYSQL *conn, char *sql)
     }
 }
 
-// 把聊天室加入list
 void add_to_room_list(struct Chatroom *room)
 {
     for (int i = 0; i < OPEN_MAX + 1; i++)
@@ -113,7 +132,7 @@ void add_to_room_list(struct Chatroom *room)
     }
     chatroom_count++;
 }
-// 把聊天室删除
+
 void delete_from_room_list(int roomid)
 {
     for (int i = 0; i < OPEN_MAX + 1; i++)
@@ -158,7 +177,7 @@ void delete_from_client_list(int uid)
     }
     online_user_count--;
 }
-// help文档
+
 void send_help(int fd)
 {
     char msg[MAXLINE];
@@ -175,7 +194,7 @@ void send_help(int fd)
     strcat(msg, "** Use ' send `message` to send messages to your current chatroom **\n");
     Write(fd, msg, strlen(msg));
 }
-// 给同一个聊天室的所有用户发消息
+
 void send_to_all(char *msg, struct UserClient *cli)
 {
     char *all_msg;
@@ -191,7 +210,7 @@ void send_to_all(char *msg, struct UserClient *cli)
         }
     }
 }
-// 给特定用户发消息
+
 void send_to_certain(char *msg, struct UserClient *cli, int uid)
 {
     char *all;
@@ -213,7 +232,7 @@ void send_to_certain(char *msg, struct UserClient *cli, int uid)
         }
     }
 }
-// list -u 发送所有在线用户
+
 void send_online_users(int fd)
 {
     char all[100];
@@ -231,7 +250,7 @@ void send_online_users(int fd)
         }
     }
 }
-// list -r 发送所有开设的聊天室
+
 void send_open_rooms(int fd)
 {
     // char all[100];
@@ -251,6 +270,7 @@ void send_open_rooms(int fd)
         }
     }
 }
+/*
 int is_chatroom_empty(int roomid)
 {
     for (int i = 0; i < OPEN_MAX + 1; i++)
@@ -266,6 +286,8 @@ int is_chatroom_empty(int roomid)
     // 都不是则返回true
     return 1;
 }
+暂时没用
+*/
 struct Chatroom *get_room(int rmid)
 {
     for (int i = 0; i < OPEN_MAX + 1; i++)
@@ -287,19 +309,12 @@ int join_chatroom(int rmid, char *pwd, struct UserClient *cli)
 {
     struct Chatroom *room, *temp;
     room = get_room(rmid);
-    // TMD这个地方必须复制，不然下面就会出错，cnm
+    // TMD这个地方必须复制，不然下面就会出错
     char *password;
     strcpy(password, room->password);
-    // room = rooms[1];
-    // char s[100];
-    // sprintf(s, "before rmid:%d\n", room->roomid);
-    // Write(STDOUT_FILENO, s, strlen(s));
+
     if (room != NULL)
     {
-        // sprintf(s, "before numbers:%d\n", room->numbers);
-        // Write(STDOUT_FILENO, s, strlen(s));
-        // 如果密码相同
-        // if (strcmp(room->password, pwd) == 0)
         if (strcmp(password, pwd) == 0)
         {
             cli->roomid = rmid;
