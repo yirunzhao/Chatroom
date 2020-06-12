@@ -363,6 +363,7 @@ int main(void)
     char buf[MAXLINE], str[INET_ADDRSTRLEN]; // 接受客户端发来的信息
     char *command, *param;                   // 指令、指令的参数
     char message[MAXLINE];                   // 发送的消息
+    char *hello = "Welcome to WHU.CS.Ryan's Chatroom!\n"; // 欢迎信息
     char *need_login = "You have to login first!\n";
     struct sockaddr_in server_addr, client_addr;
     socklen_t client_len;
@@ -456,6 +457,8 @@ int main(void)
                 cli->islogin = 0; // 没有登陆
                 sprintf(cli->name, "user %d", cli->uid);
                 add_to_client_list(cli);
+                
+                Write(connect_fd,hello,strlen(hello));
             }
             // 如果是数据读写事件
             else
