@@ -22,3 +22,5 @@
 - `login username password`     登陆
 - `register username password`  注册
 - `logout`          登出
+- `chgpwd oldpwd newpwd`    更改密码
+- `chgname newname`     更改用户名

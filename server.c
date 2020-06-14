@@ -48,6 +48,7 @@ struct UserClient
     int uid;                 // 用户的id,实际上不要也可以
     int roomid;              // 用户所属的聊天室
     char name[32];           // 用户名，初始化为uid
+    char password[20];       // 用户密码
     int islogin;             // 判断是否登陆
 };
 // 记录连接的用户
@@ -457,6 +458,7 @@ int main(void)
                 cli->uid = Userid++;
                 cli->islogin = 0; // 没有登陆
                 sprintf(cli->name, "user %d", cli->uid);
+                sprintf(cli->password,"123");   // 初始密码，其实没有意义
                 add_to_client_list(cli);
                 
                 Write(connect_fd,hello,strlen(hello));
@@ -695,10 +697,68 @@ int main(void)
                                 Write(sock_fd, "login successfully!\n", strlen("login successfully!\n"));
                                 // 然后干其他的事情
                                 strcpy(cli->name, name);
+                                strcpy(cli->password, pwd);
                                 cli->islogin = 1;
                             }
                         }
                     }
+                    // 修改密码
+                    else if (strcmp(command, "chgpwd") == 0)
+                    {
+                        if(cli->islogin == 1){
+                            param = strtok(NULL, " ");  // param是旧密码
+                            char oldpwd[20],newpwd[20],sql[100];
+                            char test[20];
+                            if (param != NULL){
+                                strcpy(oldpwd, param);
+                                // 如果旧密码对了
+                                if(strcmp(oldpwd,cli->password) == 0){
+                                    param = strtok(NULL, " ");  // param是新密码
+                                    strcpy(newpwd,param);
+                                    sprintf(sql,"update user set password='%s' where name='%s'",newpwd,cli->name);
+                                    int ok = mysql_query(conn,sql);
+                                    if (ok != 0){
+                                        Write(sock_fd,"Change password fail!\n",strlen("Change password fail!\n"));
+                                    }else{
+                                        Write(sock_fd,"Change password successfully!\n",strlen("Change password successfully!\n"));
+                                        
+                                        strcpy(cli->password,newpwd);
+                                        
+                                    }
+                                    
+                                }
+                                else{
+                                    Write(sock_fd,"Wrong old password!\n",strlen("Wrong old password!\n"));
+                                }
+                            }
+                        }else{
+                            Write(sock_fd, need_login, strlen(need_login));
+                        } 
+                    }
+                    else if (strcmp(command, "chgname") == 0)
+                    {
+                        if(cli->islogin == 1){
+                            param = strtok(NULL," ");   // param是新name
+                            char newname[32];
+                            if(param != NULL){
+                                strcpy(newname,param);
+                                char sql[100];
+                                sprintf(sql,"update user set name='%s' where name='%s'",newname,cli->name);
+                                int ok = mysql_query(conn,sql);
+                                    if (ok != 0){
+                                        Write(sock_fd,"Change name fail!\n",strlen("Change name fail!\n"));
+                                    }else{
+                                        Write(sock_fd,"Change name successfully!\n",strlen("Change name successfully!\n"));
+                                        
+                                        strcpy(cli->name,newname);
+                                        
+                                    }
+                            }
+                            
+
+                        }
+                    }
+                    // 登出
                     else if (strcmp(command, "logout") == 0)
                     {
                         Write(sock_fd, "logout successfully!\n", strlen("logout successfully!\n"));
