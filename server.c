@@ -184,15 +184,17 @@ void send_help(int fd)
     char msg[MAXLINE];
     strcat(msg, "** This is a chatroom made by WHU.CS.Ryan, see more details on my github: https://github.com/yirunzhao/Chatroom **\n");
     strcat(msg, "** This chatroom is the final assigment of Linuusernamex Network Programming **\n");
-    strcat(msg, "** Use ' login `username` `password`' to sign in **\n");
-    strcat(msg, "** Use ' register `username` `password`' to sign up **\n");
-    strcat(msg, "** Use ' list -r' to get all online chatrooms **\n");
-    strcat(msg, "** Use ' list -u' to get all online users **\n");
-    strcat(msg, "** Use ' leave' to leave current chatroom **\n");
-    strcat(msg, "** Use ' createrm `roomid` `roompwd` to create a chatroom **\n");
-    strcat(msg, "** Use ' enter `roomid` `roompwd` to enter a chatroom **\n");
-    strcat(msg, "** Use ' sendtouser `userid` `message` to send messages to a certain user **\n");
-    strcat(msg, "** Use ' send `message` to send messages to your current chatroom **\n");
+    strcat(msg, "** Use ' login `username` `password` ' to sign in **\n");
+    strcat(msg, "** Use ' register `username` `password` ' to sign up **\n");
+    strcat(msg, "** Use ' list -r ' to get all online chatrooms **\n");
+    strcat(msg, "** Use ' list -u ' to get all online users **\n");
+    strcat(msg, "** Use ' leave ' to leave current chatroom **\n");
+    strcat(msg, "** Use ' createrm `roomid` `roompwd` ' to create a chatroom **\n");
+    strcat(msg, "** Use ' join `roomid` `roompwd` ' to enter a chatroom **\n");
+    strcat(msg, "** Use ' sendtouser `userid` `message` ' to send messages to a certain user **\n");
+    strcat(msg, "** Use ' logout ' to logout **\n");
+    strcat(msg, "** Use ' chgpwd `oldpwd` `newpwd` ' to change your password **\n");
+    strcat(msg, "** Use ' chgname `newname` to change your name **\n");
     Write(fd, msg, strlen(msg));
 }
 
