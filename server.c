@@ -596,6 +596,7 @@ int main(void)
                                 add_to_room_list(rm);
                                 // 把用户的房间切换
                                 cli->roomid = rm->roomid;
+                                Write(sock_fd, "Create Room Successfully!\n", strlen("Create Room Successfully!\n"));
                             }
                         }
                         else
@@ -678,7 +679,7 @@ int main(void)
                             int no = query(conn, "select * from user") + 1;
                             sprintf(sql, "insert into user values(%d,'%s','%s')", no, name, pwd);
                             query(conn, sql);
-                            Write(sock_fd, "Create Account Successfully!\n", strlen("Create Account Successfully"));
+                            Write(sock_fd, "Create Account Successfully!\n", strlen("Create Account Successfully!\n"));
                         }
                     }
                     // 登陆
@@ -701,6 +702,9 @@ int main(void)
                                 strcpy(cli->name, name);
                                 strcpy(cli->password, pwd);
                                 cli->islogin = 1;
+                            }
+                            else{
+                                Write(sock_fd, "login fail!\n", strlen("login fail!\n"));
                             }
                         }
                     }
